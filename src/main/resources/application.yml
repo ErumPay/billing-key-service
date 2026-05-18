@@ -1,1 +1,23 @@
-spring.application.name=billing-key-service
+spring:
+  application:
+    name: billing-key-service
+
+  datasource:
+    url: jdbc:mysql://localhost:3308/pg_billing_db?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    username: root
+    password: 1234
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+card-simulator:
+  base-url: http://localhost:8095
+
+aes:
+  secret-key: ${AES_SECRET_KEY:2B7E151628AED2A6ABF7158809CF4F3C}
