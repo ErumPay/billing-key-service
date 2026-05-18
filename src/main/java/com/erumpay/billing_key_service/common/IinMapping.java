@@ -20,10 +20,14 @@ public class IinMapping {
     private IinMapping() {}
 
     public static CardCompany findByCardNumber(String cardNumber) {
-        if (cardNumber == null || cardNumber.length() < 6) {
+        if (cardNumber == null) {
             return CardCompany.UNKNOWN;
         }
-        String iin = cardNumber.substring(0, 6);
+        String normalized = cardNumber.replaceAll("\\D", "");
+        if (normalized.length() < 6) {
+            return CardCompany.UNKNOWN;
+        }
+        String iin = normalized.substring(0, 6);
         return IIN_TO_CARD_COMPANY.getOrDefault(iin, CardCompany.UNKNOWN);
     }
 }
