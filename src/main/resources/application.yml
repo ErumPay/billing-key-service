@@ -2,6 +2,9 @@ spring:
   application:
     name: billing-key-service
 
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
   datasource:
     url: jdbc:mysql://localhost:3308/pg_billing_db?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: root
@@ -18,6 +21,9 @@ spring:
 
 card-simulator:
   base-url: http://localhost:8095
+
+pg:
+  id: ${PG_ID:001}
 
 aes:
   secret-key: ${AES_SECRET_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
