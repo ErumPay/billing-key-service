@@ -9,6 +9,8 @@ import com.erumpay.billing_key_service.common.IinMapping;
 import com.erumpay.billing_key_service.common.RandomStringGenerator;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueRequest;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueResponse;
+import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveRequest;
+import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveResponse;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenInquireRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenIssueRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenResponse;
@@ -18,8 +20,10 @@ import com.erumpay.billing_key_service.repository.PgBillingKeyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -84,6 +88,22 @@ public class BillingKeyService {
                 .cardCompany(cardCompany)
                 .responseCode(tokenResponse == null ? null : tokenResponse.responseCode())
                 .responseMessage(tokenResponse == null ? "카드사 통신 실패" : tokenResponse.responseMessage())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public BillingKeyTokenRetrieveResponse tokenRetrieve(BillingKeyTokenRetrieveRequest request) {
+        PgBillingKey billingKey = billingKeyRepository
+                .findByBillingKeyAndStatus(request.billingKey(), Status.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "ACTIVE 빌링키를 찾을 수 없습니다."));
+
+        String cardToken = aesCryptoUtil.decrypt(billingKey.getCardToken());
+
+        return BillingKeyTokenRetrieveResponse.builder()
+                .billingKey(billingKey.getBillingKey())
+                .cardToken(cardToken)
+                .cardCompany(billingKey.getCardCompany())
                 .build();
     }
 
