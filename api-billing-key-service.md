@@ -34,7 +34,7 @@
 ### Logic
 
 1. Pay Server로부터 카드 및 사용자 정보 수신
-2. `idempotency_key` 생성 (형식: `{PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}`, 48자, OP 코드: `ISS`=발급/`DEL`=삭제, 예: `001-ISS-20260507082830-a1b2c3d4e5f6g7h8i9j0k1l2m`)
+2. `idempotency_key` 생성 (형식: `{PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}`, 48자, OP 코드: `ISS`=발급/`DEL`=삭제, 예: `001-ISS-20260507082830-5f8a3b9c2d6e1f4a7b0c5d8e3`)
 3. `pg_billing_keys` 테이블에 PENDING 행 INSERT (`idempotency_key`, `pay_card_id`, `status='PENDING'`)
    - `live_pay_card_id` UNIQUE 제약으로 동일 `pay_card_id`의 PENDING/ACTIVE 빌링키 중복 자동 차단 (DELETED/FAILED 행이 누적되어 있어도 신규 INSERT 가능)
 4. IIN(카드번호 앞 6자리) 기반 카드사 식별
