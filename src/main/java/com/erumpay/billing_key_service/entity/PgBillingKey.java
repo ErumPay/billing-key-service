@@ -72,6 +72,9 @@ public class PgBillingKey {
     }
 
     public void activate(String billingKey, String cardToken, String maskedNumber, CardCompany cardCompany) {
+        if (this.status != Status.PENDING) {
+            throw new IllegalStateException("Only PENDING billing keys can be activated. current=" + this.status);
+        }
         this.billingKey = billingKey;
         this.cardToken = cardToken;
         this.maskedNumber = maskedNumber;
@@ -80,6 +83,9 @@ public class PgBillingKey {
     }
 
     public void markFailed() {
+        if (this.status != Status.PENDING) {
+            throw new IllegalStateException("Only PENDING billing keys can be marked as failed. current=" + this.status);
+        }
         this.status = Status.FAILED;
     }
 }

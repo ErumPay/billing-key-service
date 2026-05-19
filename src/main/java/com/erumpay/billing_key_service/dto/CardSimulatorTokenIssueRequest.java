@@ -12,4 +12,9 @@ public record CardSimulatorTokenIssueRequest(
         @JsonProperty("password_2digit") String password2digit,
         @JsonProperty("birth_date") String birthDate
 ) {
+    @Override
+    public String toString() {
+        return "CardSimulatorTokenIssueRequest(pgId=%s, cardCompany=%s, cardNumber=****, expiryDate=****, cvc=****, password2digit=****, birthDate=****)"
+                .formatted(pgId, cardCompany);
+    }
 }

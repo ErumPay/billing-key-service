@@ -91,12 +91,13 @@ public class BillingKeyService {
                                                                      CardSimulatorTokenIssueRequest request) {
         try {
             return cardSimulatorClient.issueToken(idempotencyKey, request);
-        } catch (Exception e) {
-            log.warn("카드사 토큰 발급 호출 실패, 조회 API로 재확인 시도: {}", e.getMessage());
+        } catch (feign.RetryableException e) {
+            // 타임아웃/IO 실패만 fallback. 4xx/5xx 같은 비즈니스 응답은 호출자에게 전파
+            log.warn("카드사 토큰 발급 타임아웃/IO 실패, 조회 API로 재확인 시도: {}", e.getMessage());
             try {
                 return cardSimulatorClient.inquireToken(new CardSimulatorTokenInquireRequest(idempotencyKey));
-            } catch (Exception inner) {
-                log.error("카드사 토큰 조회도 실패", inner);
+            } catch (feign.RetryableException inner) {
+                log.error("카드사 토큰 조회도 타임아웃/IO 실패", inner);
                 return null;
             }
         }
