@@ -1,0 +1,21 @@
+package com.erumpay.billing_key_service.client;
+
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenInquireRequest;
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenIssueRequest;
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenResponse;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+
+@FeignClient(name = "card-simulator", url = "${card-simulator.base-url}")
+public interface CardSimulatorClient {
+
+    @PostMapping("/api/v1/card-simulator/token/issue")
+    CardSimulatorTokenResponse issueToken(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody CardSimulatorTokenIssueRequest request);
+
+    @PostMapping("/api/v1/card-simulator/token/inquire")
+    CardSimulatorTokenResponse inquireToken(@RequestBody CardSimulatorTokenInquireRequest request);
+}
