@@ -88,4 +88,11 @@ public class PgBillingKey {
         }
         this.status = Status.FAILED;
     }
+
+    public void markDeleted() {
+        if (this.status != Status.ACTIVE) {
+            throw new IllegalStateException("Only ACTIVE billing keys can be deleted. current=" + this.status);
+        }
+        this.status = Status.DELETED;
+    }
 }

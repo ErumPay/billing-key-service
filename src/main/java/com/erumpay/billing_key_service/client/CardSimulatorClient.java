@@ -1,5 +1,7 @@
 package com.erumpay.billing_key_service.client;
 
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteRequest;
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteResponse;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenInquireRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenIssueRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenResponse;
@@ -18,4 +20,9 @@ public interface CardSimulatorClient {
 
     @PostMapping("/api/v1/card-simulator/token/inquire")
     CardSimulatorTokenResponse inquireToken(@RequestBody CardSimulatorTokenInquireRequest request);
+
+    @PostMapping("/api/v1/card-simulator/token/delete")
+    CardSimulatorTokenDeleteResponse deleteToken(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody CardSimulatorTokenDeleteRequest request);
 }

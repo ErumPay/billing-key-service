@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface PgBillingKeyRepository extends JpaRepository<PgBillingKey, Long> {
 
     Optional<PgBillingKey> findByBillingKeyAndStatus(String billingKey, Status status);
+
+    Optional<PgBillingKey> findByPayCardIdAndBillingKeyAndStatus(Long payCardId, String billingKey, Status status);
 }
