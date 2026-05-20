@@ -7,10 +7,14 @@ import com.erumpay.billing_key_service.common.IdempotencyKeyGenerator;
 import com.erumpay.billing_key_service.common.IdempotencyKeyGenerator.Operation;
 import com.erumpay.billing_key_service.common.IinMapping;
 import com.erumpay.billing_key_service.common.RandomStringGenerator;
+import com.erumpay.billing_key_service.dto.BillingKeyDeleteRequest;
+import com.erumpay.billing_key_service.dto.BillingKeyDeleteResponse;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueRequest;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueResponse;
 import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveRequest;
 import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveResponse;
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteRequest;
+import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteResponse;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenInquireRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenIssueRequest;
 import com.erumpay.billing_key_service.dto.CardSimulatorTokenResponse;
@@ -89,6 +93,55 @@ public class BillingKeyService {
                 .responseCode(tokenResponse == null ? null : tokenResponse.responseCode())
                 .responseMessage(tokenResponse == null ? "카드사 통신 실패" : tokenResponse.responseMessage())
                 .build();
+    }
+
+    @Transactional
+    public BillingKeyDeleteResponse delete(BillingKeyDeleteRequest request) {
+        // 1. pay_card_id + billing_key 일치 ACTIVE 행 조회
+        PgBillingKey active = billingKeyRepository
+                .findByPayCardIdAndBillingKeyAndStatus(request.payCardId(), request.billingKey(), Status.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "ACTIVE 빌링키를 찾을 수 없습니다."));
+
+        // 2. card_token 복호화 + 카드사 호출용 idempotency_key 생성 (OP=DEL, DB 미저장)
+        String plainCardToken = aesCryptoUtil.decrypt(active.getCardToken());
+        String idempotencyKey = idempotencyKeyGenerator.generate(Operation.DEL);
+
+        // 3. 카드사 토큰 삭제 호출
+        CardSimulatorTokenDeleteResponse tokenResponse;
+        try {
+            tokenResponse = cardSimulatorClient.deleteToken(idempotencyKey,
+                    new CardSimulatorTokenDeleteRequest(pgId, active.getCardCompany(), plainCardToken));
+        } catch (feign.RetryableException e) {
+            log.error("카드사 토큰 삭제 타임아웃/IO 실패", e);
+            // 실패: status='ACTIVE' 유지, Pay 서버에 통신 실패 응답
+            return BillingKeyDeleteResponse.builder()
+                    .payCardId(request.payCardId())
+                    .billingKey(request.billingKey())
+                    .responseCode(null)
+                    .responseMessage("카드사 통신 실패")
+                    .build();
+        }
+
+        // 4. 응답 처리 (응답코드/메시지 DB 미저장, Pay 서버에 그대로 전달)
+        boolean success = tokenResponse != null
+                && isSuccessResponse(tokenResponse.responseCode());
+        if (success) {
+            active.markDeleted();
+        }
+        // 실패 시 status는 ACTIVE 유지 (재시도 가능)
+
+        return BillingKeyDeleteResponse.builder()
+                .payCardId(request.payCardId())
+                .billingKey(request.billingKey())
+                .responseCode(tokenResponse == null ? null : tokenResponse.responseCode())
+                .responseMessage(tokenResponse == null ? null : tokenResponse.responseMessage())
+                .build();
+    }
+
+    // 카드사 응답코드의 SUCCESS 분기는 TOKEN 카테고리 SUCCESS 코드("100")
+    private boolean isSuccessResponse(String responseCode) {
+        return "100".equals(responseCode);
     }
 
     @Transactional(readOnly = true)

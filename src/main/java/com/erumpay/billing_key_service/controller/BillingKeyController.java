@@ -1,5 +1,7 @@
 package com.erumpay.billing_key_service.controller;
 
+import com.erumpay.billing_key_service.dto.BillingKeyDeleteRequest;
+import com.erumpay.billing_key_service.dto.BillingKeyDeleteResponse;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueRequest;
 import com.erumpay.billing_key_service.dto.BillingKeyIssueResponse;
 import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveRequest;
@@ -22,6 +24,11 @@ public class BillingKeyController {
     @PostMapping("/issue")
     public BillingKeyIssueResponse issue(@RequestBody @Valid BillingKeyIssueRequest request) {
         return billingKeyService.issue(request);
+    }
+
+    @PostMapping("/delete")
+    public BillingKeyDeleteResponse delete(@RequestBody @Valid BillingKeyDeleteRequest request) {
+        return billingKeyService.delete(request);
     }
 
     @PostMapping("/token-retrieve")
