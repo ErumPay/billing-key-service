@@ -1,4 +1,4 @@
-package com.erumpay.billing_key_service.dto;
+package com.erumpay.billing_key_service.dto.client.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

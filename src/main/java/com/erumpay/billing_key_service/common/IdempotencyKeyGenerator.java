@@ -35,6 +35,11 @@ public class IdempotencyKeyGenerator {
     }
 
     public enum Operation {
-        ISS, DEL
+        ISS,    // 발행
+        DEL,    // 삭제
+        PAY,    // 결제
+        CNL,    // 결제 취소
+        PRE,    // 가승인
+        PRC,    // 가승인 취소
     }
 }
