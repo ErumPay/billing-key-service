@@ -31,6 +31,17 @@
 | `password_2digit` | String | Y    | 비밀번호 앞 두 자리 |
 | `birth_date`      | String | Y    | 생년월일 (YYMMDD)   |
 
+```json
+{
+  "pay_card_id": 12345,
+  "card_number": "5511223344556677",
+  "expiry_date": "2912",
+  "cvc": "123",
+  "password_2digit": "01",
+  "birth_date": "900101"
+}
+```
+
 ### Logic
 
 1. Pay Server로부터 카드 및 사용자 정보 수신
@@ -58,6 +69,17 @@
 | `response_code`    | String | 응답코드   |
 | `response_message` | String | 응답메시지 |
 
+```json
+{
+  "pay_card_id": 12345,
+  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
+  "masked_number": "551122******6677",
+  "card_company": "삼성카드",
+  "response_code": "S0000",
+  "response_message": "정상 처리되었습니다"
+}
+```
+
 ---
 
 ## 2. PG 빌링키(Billing Key) 삭제
@@ -78,6 +100,13 @@
 |---------------|--------|------|--------------|
 | `pay_card_id` | Long   | Y    | 페이 카드 ID |
 | `billing_key` | String | Y    | 빌링키       |
+
+```json
+{
+  "pay_card_id": 12345,
+  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8"
+}
+```
 
 ### Logic
 
@@ -101,6 +130,15 @@
 | `response_code`    | String | 카드사 응답코드   |
 | `response_message` | String | 카드사 응답메시지 |
 
+```json
+{
+  "pay_card_id": 12345,
+  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
+  "response_code": "S0000",
+  "response_message": "정상 처리되었습니다"
+}
+```
+
 ---
 
 ## 3. 카드사 토큰(Card Token) 반환
@@ -121,6 +159,12 @@
 |---------------|--------|------|--------|
 | `billing_key` | String | Y    | 빌링키 |
 
+```json
+{
+  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8"
+}
+```
+
 ### Logic
 
 1. PG Server로부터 카드사 토큰 반환 요청 수신
@@ -135,3 +179,11 @@
 | `billing_key`  | String | 빌링키      |
 | `card_token`   | String | 카드사 토큰 |
 | `card_company` | String | 카드사      |
+
+```json
+{
+  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
+  "card_token": "9f8e7d6c5b4a3210fedcba9876543210",
+  "card_company": "삼성카드"
+}
+```

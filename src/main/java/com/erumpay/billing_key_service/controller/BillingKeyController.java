@@ -1,11 +1,11 @@
 package com.erumpay.billing_key_service.controller;
 
-import com.erumpay.billing_key_service.dto.BillingKeyDeleteRequest;
-import com.erumpay.billing_key_service.dto.BillingKeyDeleteResponse;
-import com.erumpay.billing_key_service.dto.BillingKeyIssueRequest;
-import com.erumpay.billing_key_service.dto.BillingKeyIssueResponse;
-import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveRequest;
-import com.erumpay.billing_key_service.dto.BillingKeyTokenRetrieveResponse;
+import com.erumpay.billing_key_service.dto.api.request.BillingKeyDeleteRequest;
+import com.erumpay.billing_key_service.dto.api.request.BillingKeyIssueRequest;
+import com.erumpay.billing_key_service.dto.api.request.BillingKeyTokenRetrieveRequest;
+import com.erumpay.billing_key_service.dto.api.response.BillingKeyDeleteResponse;
+import com.erumpay.billing_key_service.dto.api.response.BillingKeyIssueResponse;
+import com.erumpay.billing_key_service.dto.api.response.BillingKeyTokenRetrieveResponse;
 import com.erumpay.billing_key_service.service.BillingKeyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

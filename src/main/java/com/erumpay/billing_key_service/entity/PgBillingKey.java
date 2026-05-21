@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PgBillingKey {
 
+    private static final long FIRST_POLL_DELAY_SECONDS = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "billing_key_id")
@@ -44,13 +46,21 @@ public class PgBillingKey {
     @Column(name = "masked_number", length = 25)
     private String maskedNumber;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "card_company", length = 50)
     private CardCompany cardCompany;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
+
+    @Column(name = "unknown_since")
+    private LocalDateTime unknownSince;
+
+    @Column(name = "poll_retry_count", nullable = false)
+    private int pollRetryCount;
+
+    @Column(name = "next_poll_at")
+    private LocalDateTime nextPollAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -61,7 +71,7 @@ public class PgBillingKey {
     private LocalDateTime updatedAt;
 
     public enum Status {
-        PENDING, ACTIVE, DELETED, FAILED
+        PENDING, ACTIVE, UNKNOWN, DELETED, FAILED
     }
 
     @Builder
@@ -83,10 +93,29 @@ public class PgBillingKey {
     }
 
     public void markFailed() {
-        if (this.status != Status.PENDING) {
-            throw new IllegalStateException("Only PENDING billing keys can be marked as failed. current=" + this.status);
+        if (this.status != Status.PENDING && this.status != Status.UNKNOWN) {
+            throw new IllegalStateException("Only PENDING/UNKNOWN billing keys can be marked as failed. current=" + this.status);
         }
         this.status = Status.FAILED;
+    }
+
+    public void markUnknown() {
+        if (this.status != Status.PENDING) {
+            throw new IllegalStateException("Only PENDING billing keys can be marked as unknown. current=" + this.status);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        this.status = Status.UNKNOWN;
+        this.unknownSince = now;
+        this.pollRetryCount = 0;
+        this.nextPollAt = now.plusSeconds(FIRST_POLL_DELAY_SECONDS);
+    }
+
+    public void recordPollAttempt(LocalDateTime nextPollAt) {
+        if (this.status != Status.UNKNOWN) {
+            throw new IllegalStateException("Only UNKNOWN billing keys can record poll attempts. current=" + this.status);
+        }
+        this.pollRetryCount += 1;
+        this.nextPollAt = nextPollAt;
     }
 
     public void markDeleted() {

@@ -1,10 +1,10 @@
 package com.erumpay.billing_key_service.client;
 
-import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteRequest;
-import com.erumpay.billing_key_service.dto.CardSimulatorTokenDeleteResponse;
-import com.erumpay.billing_key_service.dto.CardSimulatorTokenInquireRequest;
-import com.erumpay.billing_key_service.dto.CardSimulatorTokenIssueRequest;
-import com.erumpay.billing_key_service.dto.CardSimulatorTokenResponse;
+import com.erumpay.billing_key_service.dto.client.request.CardSimulatorTokenDeleteRequest;
+import com.erumpay.billing_key_service.dto.client.request.CardSimulatorTokenInquireRequest;
+import com.erumpay.billing_key_service.dto.client.request.CardSimulatorTokenIssueRequest;
+import com.erumpay.billing_key_service.dto.client.response.CardSimulatorTokenDeleteResponse;
+import com.erumpay.billing_key_service.dto.client.response.CardSimulatorTokenResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
