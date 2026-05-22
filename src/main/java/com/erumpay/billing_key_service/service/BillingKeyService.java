@@ -57,46 +57,51 @@ public class BillingKeyService {
     @Value("${pg.id}")
     private String pgId;
 
+    // API 1 : Billing Key Issue
     public BillingKeyIssueResponse issue(BillingKeyIssueRequest request) {
-        // 0. 중복 요청 사전 검사 — pay_card_id에 진행/활성 row가 있으면 기존 결과 echo
+        // pay_card_id 기반 중복 요청 검사
         Optional<BillingKeyIssueResponse> dup = findLiveRow(request.payCardId())
                 .map(row -> echoExisting(row, request.payCardId()));
-        if (dup.isPresent()) {
-            return dup.get();
-        }
+        // 중복 시 기존 응답 반환
+        if (dup.isPresent()) { return dup.get(); }
 
-        // 1. idempotency_key 생성
+        // 카드사 토큰 발급용 멱등성 키 생성
         String idempotencyKey = idempotencyKeyGenerator.generate(Operation.ISS);
 
-        // 2. PENDING row INSERT (tx1). 동시 race로 UNIQUE 위반 시 echo 처리
         Long billingKeyId;
         try {
+            // 발급 중 상태 DB 갱신
             billingKeyId = self.insertPending(idempotencyKey, request.payCardId());
-        } catch (DataIntegrityViolationException e) {
+        }
+        // 예외처리
+        catch (DataIntegrityViolationException e) {
             return findLiveRow(request.payCardId())
                     .map(row -> echoExisting(row, request.payCardId()))
                     .orElseThrow(() -> e);
         }
 
-        // 3. IIN으로 카드사 식별
+        // 카드사 조회
         CardCompany cardCompany = IinMapping.findByCardNumber(request.cardNumber());
 
-        // 4. 카드사 토큰 발급 호출 (트랜잭션 외부)
         CardSimulatorTokenIssueRequest tokenRequest = new CardSimulatorTokenIssueRequest(
                 pgId, cardCompany, request.cardNumber(), request.expiryDate(),
                 request.cvc(), request.password2digit(), request.birthDate());
+        // 카드사 토큰 발급 API 요청 (재시도 포함)
         IssueOutcome outcome = callIssueWithTimeoutFallback(idempotencyKey, tokenRequest);
-
-        // 5. 응답 처리 (tx2)
+        // 재시도 불발 여부 체크용 함수?
         return self.applyIssueResult(billingKeyId, request.payCardId(), cardCompany, outcome);
     }
 
     private Optional<PgBillingKey> findLiveRow(Long payCardId) {
+        // UNKNOWN은 "라이브" 취급에서 제외: live_pay_card_id unique 슬롯도 차지하지 않으므로
+        // 폴링 회복 중에도 새로운 발급을 허용한다. 기존 UNKNOWN row는 reconciliation worker가 정리.
         return billingKeyRepository.findFirstByPayCardIdAndStatusIn(
-                payCardId, List.of(Status.PENDING, Status.ACTIVE, Status.UNKNOWN));
+                payCardId, List.of(Status.PENDING, Status.ACTIVE));
     }
 
+    // 중복 요청에 대한 echo 처리
     private BillingKeyIssueResponse echoExisting(PgBillingKey row, Long payCardId) {
+        // 활성화 빌링키
         if (row.getStatus() == Status.ACTIVE) {
             return BillingKeyIssueResponse.builder()
                     .payCardId(payCardId)
@@ -104,10 +109,10 @@ public class BillingKeyService {
                     .maskedNumber(row.getMaskedNumber())
                     .cardCompany(row.getCardCompany())
                     .responseCode(null)
-                    .responseMessage("이미 발급된 빌링키")
+                    .responseMessage("이미 발급된 빌링키입니다.")
                     .build();
         }
-        // PENDING / UNKNOWN
+        // PENDING
         return BillingKeyIssueResponse.builder()
                 .payCardId(payCardId)
                 .billingKey(null)
@@ -118,6 +123,7 @@ public class BillingKeyService {
                 .build();
     }
 
+    // 발급 중 상태 DB 갱신
     @Transactional
     public Long insertPending(String idempotencyKey, Long payCardId) {
         return billingKeyRepository.save(PgBillingKey.builder()
@@ -238,12 +244,12 @@ public class BillingKeyService {
                 .build();
     }
 
+    // 카드사 토큰 발급 API 요청 (재시도 포함)
     private IssueOutcome callIssueWithTimeoutFallback(String idempotencyKey,
                                                        CardSimulatorTokenIssueRequest request) {
         try {
             return new IssueOutcome(cardSimulatorClient.issueToken(idempotencyKey, request), false);
         } catch (feign.RetryableException e) {
-            // 타임아웃/IO 실패만 fallback. 4xx/5xx 같은 비즈니스 응답은 호출자에게 전파
             log.warn("카드사 토큰 발급 타임아웃/IO 실패, 조회 API로 재확인 시도: {}", e.getMessage());
             try {
                 return new IssueOutcome(

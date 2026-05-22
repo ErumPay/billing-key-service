@@ -120,11 +120,15 @@ public class BillingKeyReconciliationWorker {
 
     private void scheduleNextPoll(PgBillingKey row) {
         int retry = row.getPollRetryCount();
+        if (retry + 1 >= MAX_RETRY_BEFORE_ALERT) {
+            // 카드사 무응답이 임계 초과 → UNKNOWN 영구 잔존 방지를 위해 FAILED 강제 확정.
+            // 그 시점까지 deleteOrphanToken 시도가 충분히 이뤄졌고, 미정리 orphan은 알람으로 수동 처리.
+            row.markFailed();
+            log.error("UNKNOWN reconciliation 시도 횟수 초과, FAILED 강제 확정 billingKeyId={} retry={}",
+                    row.getBillingKeyId(), retry + 1);
+            return;
+        }
         long backoff = BACKOFF_SECONDS[Math.min(retry, BACKOFF_SECONDS.length - 1)];
         row.recordPollAttempt(LocalDateTime.now().plusSeconds(backoff));
-        if (retry + 1 >= MAX_RETRY_BEFORE_ALERT) {
-            log.error("UNKNOWN reconciliation 시도 횟수 초과, 수동 처리 검토 필요 billingKeyId={} retry={}",
-                    row.getBillingKeyId(), retry + 1);
-        }
     }
 }
