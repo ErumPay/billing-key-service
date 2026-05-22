@@ -17,6 +17,7 @@ public interface PgBillingKeyRepository extends JpaRepository<PgBillingKey, Long
 
     List<PgBillingKey> findByStatusAndNextPollAtLessThanEqual(Status status, LocalDateTime threshold, Pageable pageable);
 
-    // 진행/활성 row (PENDING, ACTIVE, UNKNOWN) — live_pay_card_id UNIQUE 덕분에 최대 1건만 존재
+    // 진행/활성 row (PENDING, ACTIVE) — live_pay_card_id UNIQUE 덕분에 최대 1건만 존재.
+    // UNKNOWN은 unique 슬롯 밖이므로 신규 발급과 공존 가능 (reconciliation worker가 별도 정리)
     Optional<PgBillingKey> findFirstByPayCardIdAndStatusIn(Long payCardId, List<Status> statuses);
 }

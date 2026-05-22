@@ -25,9 +25,9 @@
 | 필드              | 타입   | 필수 | 설명                |
 |-------------------|--------|------|---------------------|
 | `pay_card_id`     | Long   | Y    | 페이 카드 ID        |
-| `card_number`     | String | Y    | 카드번호            |
+| `card_number`     | String | Y    | 카드번호(16자리)    |
 | `expiry_date`     | String | Y    | 유효기간 (YYMM)     |
-| `cvc`             | String | Y    | 보안코드            |
+| `cvc`             | String | Y    | 보안코드(3자리)     |
 | `password_2digit` | String | Y    | 비밀번호 앞 두 자리 |
 | `birth_date`      | String | Y    | 생년월일 (YYMMDD)   |
 
@@ -44,14 +44,27 @@
 
 ### Logic
 
-1. Pay Server로부터 카드 및 사용자 정보 수신
-2. `idempotency_key` 생성 (형식: `{PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}`, 48자, OP 코드: `ISS`=발급/`DEL`=삭제, 예: `001-ISS-20260507082830-5f8a3b9c2d6e1f4a7b0c5d8e3`)
-3. `pg_billing_keys` 테이블에 PENDING 행 INSERT (`idempotency_key`, `pay_card_id`, `status='PENDING'`)
-   - `live_pay_card_id` UNIQUE 제약으로 동일 `pay_card_id`의 PENDING/ACTIVE 빌링키 중복 자동 차단 (DELETED/FAILED 행이 누적되어 있어도 신규 INSERT 가능)
-4. IIN(카드번호 앞 6자리) 기반 카드사 식별
-5. 카드사 토큰 발급 API 호출 (`idempotency_key` 동봉)
-   - 참고: [카드사 토큰 발급](https://www.notion.so/35afef49d8d58060b8c3d1adcc1d992d?pvs=21)
-6. 응답 처리 (카드사 응답코드/메시지는 DB 미저장, 호출 응답값만 그대로 Pay 서버에 전달)
+1. `Pay Server로부터 카드 및 사용자 정보 수신`
+2. `pay_card_id 기반 중복 요청 사전 검사`
+    1) 존재하는 경우: 기존 응답 반환 (echo)
+    2) 존재하지 않는 경우: 신규 발급 절차(3번~) 진행
+3. `idempotency_key 생성`
+    - 하이픈 포함 48자
+    - 형식 : {PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}
+    - OP 코드: ISS (발급)
+4. `pg_billing_keys 테이블에 PENDING 행 INSERT`
+    - idempotency_key, pay_card_id, status='PENDING'
+    - 테이블의 live_pay_card_id UNIQUE 제약으로 동일 pay_card_id의 PENDING/ACTIVE 빌링키 중복 자동 차단
+    - UNKNOWN은 unique 슬롯 밖이므로 폴링 회복 중에도 재발급 허용 (이전 UNKNOWN row는 reconciliation worker가 별도 정리)
+5. `IIN 기반 카드사 식별`
+    - 카드번호 앞 두 자리
+6. `카드사 토큰 발급 API 호출`
+    - idempotency_key 동봉
+    - 참고: [카드사 토큰 발급](https://www.notion.so/35afef49d8d58060b8c3d1adcc1d992d?pvs=21)
+7. `응답 처리`
+    1) 성공 응답 수신
+    2) 실패 응답 수신
+ (카드사 응답코드/메시지는 DB 미저장, 호출 응답값만 그대로 Pay 서버에 전달)
    - **성공**: UUID v4 (하이픈 제외 32자) `billing_key` 생성 → 해당 행 UPDATE (`billing_key`, `card_token` AES-256 암호화 저장, `masked_number`, `card_company`, `status='ACTIVE'`)
    - **실패**: 해당 행 UPDATE (`status='FAILED'`)
    - **타임아웃**: 카드사 조회 API로 재확인 후 동일 분기, 조회도 실패 시 FAILED 처리
