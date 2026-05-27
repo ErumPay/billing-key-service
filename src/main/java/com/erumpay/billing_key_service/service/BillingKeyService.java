@@ -44,6 +44,9 @@ public class BillingKeyService {
     private static final String TOKEN_STATUS_ACTIVE = "ACTIVE";
     // 카드사 토큰 카테고리 SUCCESS 응답코드
     private static final String CARD_SIMULATOR_TOKEN_SUCCESS_CODE = "100";
+    // echo 응답코드 (카드사 토큰 카테고리 번호대 차용)
+    private static final String ECHO_ACTIVE_CODE = "102";  // 카드시뮬 TOKEN_DUPLICATE와 동일
+    private static final String ECHO_PENDING_CODE = "105"; // billing-key-service 내부 정의
 
     private final PgBillingKeyRepository billingKeyRepository;
     private final CardSimulatorClient cardSimulatorClient;
@@ -57,123 +60,141 @@ public class BillingKeyService {
     @Value("${pg.id}")
     private String pgId;
 
-    // API 1 : Billing Key Issue
+
+    /* ************************************* */
+    /* ************************************* */
+    /* ***** API 1 : Billing Key Issue ***** */
+    /* ************************************* */
+    /* ************************************* */
     public BillingKeyIssueResponse issue(BillingKeyIssueRequest request) {
         // pay_card_id 기반 중복 요청 검사
         Optional<BillingKeyIssueResponse> dup = findLiveRow(request.payCardId())
-                .map(row -> echoExisting(row, request.payCardId()));
+            .map(row -> echoExisting(row, request.payCardId()));
+
         // 중복 시 기존 응답 반환
         if (dup.isPresent()) { return dup.get(); }
 
         // 카드사 토큰 발급용 멱등성 키 생성
         String idempotencyKey = idempotencyKeyGenerator.generate(Operation.ISS);
 
+        // 발급 중 상태 DB 갱신
         Long billingKeyId;
         try {
-            // 발급 중 상태 DB 갱신
             billingKeyId = self.insertPending(idempotencyKey, request.payCardId());
         }
         // 예외처리
         catch (DataIntegrityViolationException e) {
             return findLiveRow(request.payCardId())
-                    .map(row -> echoExisting(row, request.payCardId()))
-                    .orElseThrow(() -> e);
+                .map(row -> echoExisting(row, request.payCardId()))
+                .orElseThrow(() -> e);
         }
 
         // 카드사 조회
         CardCompany cardCompany = IinMapping.findByCardNumber(request.cardNumber());
 
+        // 재시도 포함 카드사 토큰 발급 API 요청
         CardSimulatorTokenIssueRequest tokenRequest = new CardSimulatorTokenIssueRequest(
-                pgId, cardCompany, request.cardNumber(), request.expiryDate(),
-                request.cvc(), request.password2digit(), request.birthDate());
-        // 카드사 토큰 발급 API 요청 (재시도 포함)
+            pgId,
+            cardCompany,
+            request.cardNumber(),
+            request.expiryDate(),
+            request.cvc(),
+            request.password2digit(),
+            request.birthDate()
+        );
         IssueOutcome outcome = callIssueWithTimeoutFallback(idempotencyKey, tokenRequest);
-        // 재시도 불발 여부 체크용 함수?
-        return self.applyIssueResult(billingKeyId, request.payCardId(), cardCompany, outcome);
+
+        // 카드사 통신 결과에 따른 처리 및 결과 반환
+        return self.applyIssueResult(
+            billingKeyId,
+            request.payCardId(),
+            cardCompany,
+            outcome);
     }
 
+    // pay_card_id 기반 PENDING&ACTIVE 빌링키 탐색 (API 1)
     private Optional<PgBillingKey> findLiveRow(Long payCardId) {
-        // UNKNOWN은 "라이브" 취급에서 제외: live_pay_card_id unique 슬롯도 차지하지 않으므로
-        // 폴링 회복 중에도 새로운 발급을 허용한다. 기존 UNKNOWN row는 reconciliation worker가 정리.
-        return billingKeyRepository.findFirstByPayCardIdAndStatusIn(
-                payCardId, List.of(Status.PENDING, Status.ACTIVE));
+        return billingKeyRepository.findFirstByPayCardIdAndStatusIn(payCardId, List.of(Status.PENDING, Status.ACTIVE));
     }
 
-    // 중복 요청에 대한 echo 처리
+    // 중복 요청에 대한 echo 응답 (API 1)
     private BillingKeyIssueResponse echoExisting(PgBillingKey row, Long payCardId) {
-        // 활성화 빌링키
         if (row.getStatus() == Status.ACTIVE) {
             return BillingKeyIssueResponse.builder()
-                    .payCardId(payCardId)
-                    .billingKey(row.getBillingKey())
-                    .maskedNumber(row.getMaskedNumber())
-                    .cardCompany(row.getCardCompany())
-                    .responseCode(null)
-                    .responseMessage("이미 발급된 빌링키입니다.")
-                    .build();
-        }
-        // PENDING
-        return BillingKeyIssueResponse.builder()
                 .payCardId(payCardId)
-                .billingKey(null)
-                .maskedNumber(null)
+                .billingKey(row.getBillingKey())
+                .maskedNumber(row.getMaskedNumber())
                 .cardCompany(row.getCardCompany())
-                .responseCode(null)
-                .responseMessage("발급 처리 중")
+                .responseCode(ECHO_ACTIVE_CODE)
+                .responseMessage("이미 발급된 빌링키입니다.")
                 .build();
+        }
+        return BillingKeyIssueResponse.builder()
+            .payCardId(payCardId)
+            .billingKey(null)
+            .maskedNumber(null)
+            .cardCompany(null)
+            .responseCode(ECHO_PENDING_CODE)
+            .responseMessage("빌링키 발급 중입니다.")
+            .build();
     }
 
-    // 발급 중 상태 DB 갱신
+    // 발급 중 상태 DB 갱신 (API 1)
     @Transactional
     public Long insertPending(String idempotencyKey, Long payCardId) {
         return billingKeyRepository.save(PgBillingKey.builder()
-                .idempotencyKey(idempotencyKey)
-                .payCardId(payCardId)
-                .status(Status.PENDING)
-                .build()).getBillingKeyId();
+            .idempotencyKey(idempotencyKey)
+            .payCardId(payCardId)
+            .status(Status.PENDING)
+            .build()).getBillingKeyId();
     }
 
+    // 카드사 통신 결과에 따른 처리 (API 1)
     @Transactional
-    public BillingKeyIssueResponse applyIssueResult(Long billingKeyId, Long payCardId, CardCompany cardCompany,
+    public BillingKeyIssueResponse applyIssueResult(Long billingKeyId,
+                                                    Long payCardId,
+                                                    CardCompany cardCompany,
                                                     IssueOutcome outcome) {
         PgBillingKey pending = billingKeyRepository.findById(billingKeyId)
-                .orElseThrow(() -> new EntityNotFoundException("PgBillingKey not found: " + billingKeyId));
+            .orElseThrow(() -> new EntityNotFoundException("PgBillingKey not found: " + billingKeyId));
         CardSimulatorTokenResponse tokenResponse = outcome.response();
 
+        // 발급 성공
         if (tokenResponse != null && TOKEN_STATUS_ACTIVE.equals(tokenResponse.tokenStatus())) {
             String billingKey = RandomStringGenerator.generateUuidV4NoHyphen();
-            pending.activate(
-                    billingKey,
-                    aesCryptoUtil.encrypt(tokenResponse.cardToken()),
-                    tokenResponse.maskedNumber(),
-                    tokenResponse.cardCompany());
+            pending.activate(billingKey, aesCryptoUtil.encrypt(tokenResponse.cardToken()),tokenResponse.maskedNumber(), tokenResponse.cardCompany());
             return BillingKeyIssueResponse.builder()
-                    .payCardId(payCardId)
-                    .billingKey(billingKey)
-                    .maskedNumber(tokenResponse.maskedNumber())
-                    .cardCompany(tokenResponse.cardCompany())
-                    .responseCode(tokenResponse.responseCode())
-                    .responseMessage(tokenResponse.responseMessage())
-                    .build();
+                .payCardId(payCardId)
+                .billingKey(billingKey)
+                .maskedNumber(tokenResponse.maskedNumber())
+                .cardCompany(tokenResponse.cardCompany())
+                .responseCode(tokenResponse.responseCode())
+                .responseMessage(tokenResponse.responseMessage())
+                .build();
         }
 
-        // 발급+조회 모두 타임아웃: 카드사 측 실제 상태 미확정 → UNKNOWN으로 마킹 후 폴링에 위임.
-        // 사용자에게는 즉시 실패 응답을 돌려주되, DB는 reconciliation 대상으로 유지.
+        // 발급 실패 (reconciliation 실패 처리)
         if (outcome.inquireFailed()) {
             pending.markUnknown();
-        } else {
+        }
+        else {
             pending.markFailed();
         }
         return BillingKeyIssueResponse.builder()
-                .payCardId(payCardId)
-                .billingKey(null)
-                .maskedNumber(tokenResponse == null ? null : tokenResponse.maskedNumber())
-                .cardCompany(cardCompany)
-                .responseCode(tokenResponse == null ? null : tokenResponse.responseCode())
-                .responseMessage(tokenResponse == null ? "카드사 통신 실패" : tokenResponse.responseMessage())
-                .build();
+            .payCardId(payCardId)
+            .billingKey(null)
+            .maskedNumber(tokenResponse == null ? null : tokenResponse.maskedNumber())
+            .cardCompany(cardCompany)
+            .responseCode(tokenResponse == null ? null : tokenResponse.responseCode())
+            .responseMessage(tokenResponse == null ? "카드사 통신 실패" : tokenResponse.responseMessage())
+            .build();
     }
 
+    /* ************************************** */
+    /* ************************************** */
+    /* ***** API 2 : Billing Key Delete ***** */
+    /* ************************************** */
+    /* ************************************** */
     public BillingKeyDeleteResponse delete(BillingKeyDeleteRequest request) {
         // 1. ACTIVE 빌링키 조회 (tx1, read-only)
         ActiveBillingKeySnapshot snapshot = self.loadActiveForDelete(request);
@@ -228,6 +249,11 @@ public class BillingKeyService {
         row.markDeleted();
     }
 
+    /* ********************************************* */
+    /* ********************************************* */
+    /* ***** API 3 : Billing Key TokenRetrieve ***** */
+    /* ********************************************* */
+    /* ********************************************* */
     @Transactional(readOnly = true)
     public BillingKeyTokenRetrieveResponse tokenRetrieve(BillingKeyTokenRetrieveRequest request) {
         PgBillingKey billingKey = billingKeyRepository
@@ -244,19 +270,16 @@ public class BillingKeyService {
                 .build();
     }
 
-    // 카드사 토큰 발급 API 요청 (재시도 포함)
-    private IssueOutcome callIssueWithTimeoutFallback(String idempotencyKey,
-                                                       CardSimulatorTokenIssueRequest request) {
+    // 재시도 포함 카드사 토큰 발급 API 요청 (API 1)
+    private IssueOutcome callIssueWithTimeoutFallback(String idempotencyKey, CardSimulatorTokenIssueRequest request) {
         try {
             return new IssueOutcome(cardSimulatorClient.issueToken(idempotencyKey, request), false);
         } catch (feign.RetryableException e) {
             log.warn("카드사 토큰 발급 타임아웃/IO 실패, 조회 API로 재확인 시도: {}", e.getMessage());
             try {
-                return new IssueOutcome(
-                        cardSimulatorClient.inquireToken(new CardSimulatorTokenInquireRequest(idempotencyKey)),
-                        false);
+                return new IssueOutcome(cardSimulatorClient.inquireToken(new CardSimulatorTokenInquireRequest(idempotencyKey)), false);
             } catch (feign.RetryableException inner) {
-                log.error("카드사 토큰 조회도 타임아웃/IO 실패. UNKNOWN 마킹 후 폴링에 위임", inner);
+                log.error("카드사 토큰 조회도 타임아웃/IO 실패. UNKNOWN 마킹 후 Polling에 위임", inner);
                 return new IssueOutcome(null, true);
             }
         }

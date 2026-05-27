@@ -33,43 +33,47 @@
 
 ```json
 {
-  "pay_card_id": 12345,
-  "card_number": "5511223344556677",
-  "expiry_date": "2912",
-  "cvc": "123",
-  "password_2digit": "01",
-  "birth_date": "900101"
+    "pay_card_id":1001,
+    "card_number":"8000111234567890",
+    "expiry_date":"2912",
+    "cvc":"123",
+    "password_2digit":"12",
+    "birth_date":"900101"
 }
 ```
 
 ### Logic
 
-1. `Pay Server로부터 카드 및 사용자 정보 수신`
-2. `pay_card_id 기반 중복 요청 사전 검사`
-    1) 존재하는 경우: 기존 응답 반환 (echo)
-    2) 존재하지 않는 경우: 신규 발급 절차(3번~) 진행
-3. `idempotency_key 생성`
+1. **Pay Server로부터 카드 및 사용자 정보 수신**
+2. **pay_card_id 기반 중복 요청 사전 검사**
+    - PENDING/ACTIVE 상태인 토큰 조회
+        - 존재 시: 저장된 응답 반환 (echo)
+        - 미존재 시: 신규 발급 절차(3번~) 진행
+3. **idempotency_key 생성**
     - 하이픈 포함 48자
-    - 형식 : {PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}
+    - 형식: {PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}
     - OP 코드: ISS (발급)
 4. `pg_billing_keys 테이블에 PENDING 행 INSERT`
     - idempotency_key, pay_card_id, status='PENDING'
     - 테이블의 live_pay_card_id UNIQUE 제약으로 동일 pay_card_id의 PENDING/ACTIVE 빌링키 중복 자동 차단
-    - UNKNOWN은 unique 슬롯 밖이므로 폴링 회복 중에도 재발급 허용 (이전 UNKNOWN row는 reconciliation worker가 별도 정리)
+    - UNKNOWN row는 reconciliation worker가 별도 정리 (재발급 허용)
 5. `IIN 기반 카드사 식별`
     - 카드번호 앞 두 자리
 6. `카드사 토큰 발급 API 호출`
     - idempotency_key 동봉
     - 참고: [카드사 토큰 발급](https://www.notion.so/35afef49d8d58060b8c3d1adcc1d992d?pvs=21)
 7. `응답 처리`
-    1) 성공 응답 수신
-    2) 실패 응답 수신
- (카드사 응답코드/메시지는 DB 미저장, 호출 응답값만 그대로 Pay 서버에 전달)
-   - **성공**: UUID v4 (하이픈 제외 32자) `billing_key` 생성 → 해당 행 UPDATE (`billing_key`, `card_token` AES-256 암호화 저장, `masked_number`, `card_company`, `status='ACTIVE'`)
-   - **실패**: 해당 행 UPDATE (`status='FAILED'`)
-   - **타임아웃**: 카드사 조회 API로 재확인 후 동일 분기, 조회도 실패 시 FAILED 처리
-7. 민감 정보 파기 (`card_number`, `expiry_date`, `cvc`, `password_2digit`, `birth_date`)
-8. Pay Server에 결과 반환
+    - 성공 응답 수신 시
+        - UUID v4 기반 32자 billing_key 생성(하이픈 제외)
+        - DB 업데이트 (billing_key, AES-256 암호화 card_token, masked_number, card_company, status ACTIVE)
+    - 실패 응답 수신 시
+        - DB 업데이트 (status FAILED)
+    - 타임아웃 발생 시
+        - 카드사 조회 API로 재확인
+        - 조회 성공 시 성공/실패 로직 수행
+        - 조회 실패(타임아웃) 시 DB 업데이트 (status UNKNOWN)
+        - 이후 reconciliation을 통한 UNKNOWN -> FAILED 변경 (실패 처리)
+8. `Pay Server에 결과 반환`
 
 ### Response Body
 
@@ -84,12 +88,12 @@
 
 ```json
 {
-  "pay_card_id": 12345,
-  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
-  "masked_number": "551122******6677",
-  "card_company": "삼성카드",
-  "response_code": "S0000",
-  "response_message": "정상 처리되었습니다"
+    "pay_card_id": 1001,
+    "billing_key": "57b2327a4d1247ac8ed143c9c80b8faf",
+    "masked_number": "8000-****-****-7890",
+    "card_company": "삼성카드",
+    "response_code": "100",
+    "response_message": "정상 처리되었습니다."
 }
 ```
 
@@ -123,16 +127,29 @@
 
 ### Logic
 
-1. Pay Server로부터 빌링키 삭제 요청 수신
-2. `pg_billing_keys`에서 `pay_card_id` + `billing_key` 일치하는 `ACTIVE` 행 조회
-3. `card_token` 복호화
-4. 카드사 호출용 `idempotency_key` 생성 (OP: `DEL`, 동일 포맷 48자, 카드사 호출에만 사용·DB 미저장)
-5. 카드사 토큰 삭제 API 호출 (`idempotency_key` 동봉)
-   - 참고: [카드사 토큰 삭제](https://www.notion.so/358fef49d8d580aab5a8f0717f6ba83b?pvs=21)
-6. 응답 처리 (카드사 응답코드/메시지는 DB 미저장, 호출 응답값만 그대로 Pay 서버에 전달)
-   - **성공**: 해당 행 UPDATE (`status='DELETED'`, `updated_at` 자동 갱신)
-   - **실패**: `status='ACTIVE'` 유지 (DB 변경 없음, 재시도 가능)
-7. Pay Server에 결과 반환
+1. `Pay Server로부터 빌링키 삭제 요청 수신`
+2. `pg_billing_keys에서 pay_card_id + billing_key 일치하는 ACTIVE 행 조회`
+    - 미발견 시: HTTP 404 응답 ("ACTIVE 빌링키를 찾을 수 없습니다.")
+3. `card_token 복호화`
+4. `idempotency_key 생성`
+    - 하이픈 포함 48자
+    - 형식: {PG번호(3)}-{OP(3)}-{TIMESTAMP(14)}-{RANDOM(25)}
+    - OP 코드: DEL (삭제)
+    - 카드사 호출에만 사용, DB 미저장
+5. `카드사 토큰 삭제 API 호출`
+    - idempotency_key 동봉
+    - 전달값: pg_id, card_company, card_token (평문)
+    - 참고: [카드사 토큰 삭제](https://www.notion.so/358fef49d8d580aab5a8f0717f6ba83b?pvs=21)
+6. `응답 처리`
+    - 카드사 응답코드/메시지는 DB 미저장, 응답값만 그대로 Pay Server에 전달
+    - 성공 응답 수신 시
+        - 해당 행 UPDATE (status='DELETED', updated_at 자동 갱신)
+    - 실패 응답 수신 시
+        - status='ACTIVE' 유지 (DB 변경 없음, 재시도 가능)
+    - 타임아웃 발생 시
+        - status='ACTIVE' 유지 (DB 변경 없음, 재시도 가능)
+        - Pay Server에 응답: response_code=null, response_message="카드사 통신 실패"
+7. `Pay Server에 결과 반환`
 
 ### Response Body
 
@@ -147,8 +164,8 @@
 {
   "pay_card_id": 12345,
   "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
-  "response_code": "S0000",
-  "response_message": "정상 처리되었습니다"
+  "response_code": "100",
+  "response_message": "정상 처리되었습니다."
 }
 ```
 
@@ -174,16 +191,17 @@
 
 ```json
 {
-  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8"
+    "billing_key": "3a6914c643894e7a879e6141366f6bd3"
 }
 ```
 
 ### Logic
 
-1. PG Server로부터 카드사 토큰 반환 요청 수신
-2. `pg_billing_keys`에서 `billing_key` 일치하는 `ACTIVE` 행 조회
-3. `card_token` 복호화
-4. PG Server에 카드사 토큰 반환
+1. `PG Server로부터 카드사 토큰 반환 요청 수신`
+2. `pg_billing_keys에서 billing_key 일치하는 ACTIVE 행 조회`
+    - 미발견 시: HTTP 404 응답 ("ACTIVE 빌링키를 찾을 수 없습니다.")
+3. `card_token 복호화`
+4. `PG Server에 카드사 토큰 반환`
 
 ### Response Body
 
@@ -195,8 +213,8 @@
 
 ```json
 {
-  "billing_key": "3f1a2b3c4d5e6f708192a3b4c5d6e7f8",
-  "card_token": "9f8e7d6c5b4a3210fedcba9876543210",
-  "card_company": "삼성카드"
+    "billing_key": "3a6914c643894e7a879e6141366f6bd3",
+    "card_token": "5777475f7d34440497f13f5c9ae054a8",
+    "card_company": "삼성카드"
 }
 ```

@@ -21,18 +21,22 @@ public class BillingKeyController {
 
     private final BillingKeyService billingKeyService;
 
+    /* ***** API 1 : Billing Key Issue ***** */
     @PostMapping("/issue")
     public BillingKeyIssueResponse issue(@RequestBody @Valid BillingKeyIssueRequest request) {
         return billingKeyService.issue(request);
     }
 
+    /* ***** API 2 : Billing Key Delete ***** */
     @PostMapping("/delete")
     public BillingKeyDeleteResponse delete(@RequestBody @Valid BillingKeyDeleteRequest request) {
         return billingKeyService.delete(request);
     }
 
+    /* ***** API 3 : Billing Key TokenRetrieve ***** */
     @PostMapping("/token-retrieve")
     public BillingKeyTokenRetrieveResponse tokenRetrieve(@RequestBody @Valid BillingKeyTokenRetrieveRequest request) {
         return billingKeyService.tokenRetrieve(request);
     }
+
 }
