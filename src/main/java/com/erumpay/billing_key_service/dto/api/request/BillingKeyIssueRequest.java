@@ -6,16 +6,17 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 public record BillingKeyIssueRequest(
-        @JsonProperty("pay_card_id") @NotNull Long payCardId,
-        @JsonProperty("card_number") @NotBlank @Pattern(regexp = "^\\d{16}$") String cardNumber,
-        @JsonProperty("expiry_date") @NotBlank @Pattern(regexp = "^\\d{2}(0[1-9]|1[0-2])$") String expiryDate,
-        @NotBlank @Pattern(regexp = "^\\d{3}$") String cvc,
-        @JsonProperty("password_2digit") @NotBlank @Pattern(regexp = "^\\d{2}$") String password2digit,
-        @JsonProperty("birth_date") @NotBlank @Pattern(regexp = "^\\d{6}$") String birthDate
+    @JsonProperty("pay_card_id") @NotNull Long payCardId,
+    @JsonProperty("card_number") @NotBlank @Pattern(regexp = "^\\d{16}$") String cardNumber,
+    @JsonProperty("expiry_date") @NotBlank @Pattern(regexp = "^\\d{2}(0[1-9]|1[0-2])$") String expiryDate,
+    @NotBlank @Pattern(regexp = "^\\d{3}$") String cvc,
+    @JsonProperty("password_2digit") @NotBlank @Pattern(regexp = "^\\d{2}$") String password2digit,
+    @JsonProperty("birth_date") @NotBlank @Pattern(regexp = "^\\d{6}$") String birthDate
 ) {
     @Override
     public String toString() {
         return "BillingKeyIssueRequest(payCardId=%s, cardNumber=****, expiryDate=****, cvc=****, password2digit=****, birthDate=****)"
-                .formatted(payCardId);
+            .formatted(payCardId);
     }
+
 }
