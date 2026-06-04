@@ -21,19 +21,19 @@ public class BillingKeyController {
 
     private final BillingKeyService billingKeyService;
 
-    /* ***** API 1 : Billing Key Issue ***** */
+    // [be] 하지혁 260603 BillingKey API 1 : 빌링키 발급
     @PostMapping("/issue")
     public BillingKeyIssueResponse issue(@RequestBody @Valid BillingKeyIssueRequest request) {
         return billingKeyService.issue(request);
     }
 
-    /* ***** API 2 : Billing Key Delete ***** */
+    // [be] 하지혁 260603 BillingKey API 2 : 빌링키 삭제
     @PostMapping("/delete")
     public BillingKeyDeleteResponse delete(@RequestBody @Valid BillingKeyDeleteRequest request) {
         return billingKeyService.delete(request);
     }
 
-    /* ***** API 3 : Billing Key TokenRetrieve ***** */
+    // [be] 하지혁 260603 BillingKey API 3 : 빌링키 토큰 조회
     @PostMapping("/token-retrieve")
     public BillingKeyTokenRetrieveResponse tokenRetrieve(@RequestBody @Valid BillingKeyTokenRetrieveRequest request) {
         return billingKeyService.tokenRetrieve(request);

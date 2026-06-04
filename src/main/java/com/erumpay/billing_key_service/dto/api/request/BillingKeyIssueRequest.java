@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
+// [be] 하지혁 260603 빌링키 발급 Request DTO
 public record BillingKeyIssueRequest(
     @JsonProperty("pay_card_id") @NotNull Long payCardId,
     @JsonProperty("card_number") @NotBlank @Pattern(regexp = "^\\d{16}$") String cardNumber,

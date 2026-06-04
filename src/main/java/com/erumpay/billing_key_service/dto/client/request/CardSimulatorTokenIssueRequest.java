@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
+// [be] 하지혁 260603 카드사 토큰 발급 Client Request DTO
 public record CardSimulatorTokenIssueRequest(
     @JsonProperty("pg_id") @NotBlank String pgId,
     @JsonProperty("card_company") @NotNull CardCompany cardCompany,

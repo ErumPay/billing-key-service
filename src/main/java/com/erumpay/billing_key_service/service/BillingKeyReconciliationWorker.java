@@ -46,6 +46,7 @@ public class BillingKeyReconciliationWorker {
     @Value("${pg.id}")
     private String pgId;
 
+    // [be] 하지혁 260603 BillingKey reconciliation : UNKNOWN 상태 빌링키 폴링 처리
     @Scheduled(fixedDelayString = "${reconciliation.poll-interval-ms:30000}")
     public void reconcile() {
         List<Long> targets = self.fetchPollTargetIds();
@@ -62,6 +63,7 @@ public class BillingKeyReconciliationWorker {
         }
     }
 
+    // 다음 폴링 대상(UNKNOWN, next_poll_at 도래) 조회
     @Transactional(readOnly = true)
     public List<Long> fetchPollTargetIds() {
         return billingKeyRepository
@@ -72,6 +74,7 @@ public class BillingKeyReconciliationWorker {
                 .toList();
     }
 
+    // 단일 빌링키 reconciliation 처리 (카드사 토큰 조회 → ACTIVE면 orphan 삭제 후 FAILED 확정)
     @Transactional
     public void reconcileOne(Long billingKeyId) {
         PgBillingKey row = billingKeyRepository.findById(billingKeyId)
@@ -106,6 +109,7 @@ public class BillingKeyReconciliationWorker {
         log.info("UNKNOWN reconciliation: 카드사에 토큰 없음 확인, FAILED 확정 billingKeyId={}", billingKeyId);
     }
 
+    // 사용자에게 실패 응답한 후 카드사에 살아있는 orphan 토큰 삭제
     private boolean deleteOrphanToken(PgBillingKey row, String cardToken) {
         String deleteIdempotencyKey = idempotencyKeyGenerator.generate(Operation.DEL);
         try {
@@ -118,6 +122,7 @@ public class BillingKeyReconciliationWorker {
         }
     }
 
+    // 지수 백오프로 다음 폴링 예약, 임계 초과 시 FAILED 강제 확정
     private void scheduleNextPoll(PgBillingKey row) {
         int retry = row.getPollRetryCount();
         if (retry + 1 >= MAX_RETRY_BEFORE_ALERT) {
