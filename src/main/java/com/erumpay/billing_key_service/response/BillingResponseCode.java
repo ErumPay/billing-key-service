@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+// [be] 하지혁 260603 빌링키 응답 코드 enum
 @Getter
 @AllArgsConstructor
 public enum BillingResponseCode {
@@ -14,6 +15,8 @@ public enum BillingResponseCode {
     BILLING_KEY_ALREADY_ACTIVE(HttpStatus.OK, "BIL-KEY-101", "BILLING_KEY_ALREADY_ACTIVE", "이미 발급된 빌링키입니다."),
     BILLING_KEY_PENDING(HttpStatus.OK, "BIL-KEY-102", "BILLING_KEY_PENDING", "빌링키 발급 처리 중입니다."),
     BILLING_KEY_NOT_FOUND(HttpStatus.OK, "BIL-KEY-103", "BILLING_KEY_NOT_FOUND", "빌링키를 찾을 수 없습니다."),
+    BILLING_KEY_ISSUE_FAILED(HttpStatus.OK, "BIL-KEY-104", "BILLING_KEY_ISSUE_FAILED", "빌링키 발급에 실패했습니다."),
+    BILLING_KEY_ALREADY_DELETED(HttpStatus.OK, "BIL-KEY-105", "BILLING_KEY_ALREADY_DELETED", "이미 삭제된 빌링키입니다."),
 
     // ===== CARD (카드시뮬 CARD 도메인 1:1 매핑) =====
     CARD_LOST(HttpStatus.OK, "BIL-CARD-201", "CARD_LOST", "분실 신고된 카드입니다."),
@@ -26,7 +29,6 @@ public enum BillingResponseCode {
 
     // ===== TOKEN (카드시뮬 TOKEN 도메인 1:1 매핑, 삭제 시점) =====
     TOKEN_NOT_FOUND(HttpStatus.OK, "BIL-TOKEN-101", "TOKEN_NOT_FOUND", "카드사 토큰을 찾을 수 없습니다."),
-    TOKEN_ALREADY_DELETED(HttpStatus.OK, "BIL-TOKEN-103", "TOKEN_ALREADY_DELETED", "이미 삭제된 카드사 토큰입니다."),
 
     // ===== USER (카드시뮬 USER 도메인 1:1 매핑) =====
     USER_BIRTH_INVALID(HttpStatus.OK, "BIL-USER-501", "USER_BIRTH_INVALID", "본인 정보가 일치하지 않습니다.");
@@ -40,13 +42,15 @@ public enum BillingResponseCode {
         return status.value();
     }
 
-    // 카드시뮬 응답코드(SIM-xxx-NNN) → 빌링키 응답코드 매핑
+    // 카드시뮬 응답코드(SIM-xxx-NNN) → 빌링키 응답코드 1:1 매핑
     public static BillingResponseCode fromSimulatorCode(String simulatorCode) {
         if (simulatorCode == null) return null;
         return switch (simulatorCode) {
             case "SIM-TOKEN-100" -> BILLING_KEY_SUCCESS;
             case "SIM-TOKEN-101" -> TOKEN_NOT_FOUND;
-            case "SIM-TOKEN-103" -> TOKEN_ALREADY_DELETED;
+            case "SIM-TOKEN-102" -> BILLING_KEY_ALREADY_ACTIVE;
+            case "SIM-TOKEN-103" -> BILLING_KEY_ALREADY_DELETED;
+            case "SIM-TOKEN-104" -> BILLING_KEY_ISSUE_FAILED;
             case "SIM-CARD-201" -> CARD_LOST;
             case "SIM-CARD-202" -> CARD_EXPIRED;
             case "SIM-CARD-203" -> CARD_DELETED;
