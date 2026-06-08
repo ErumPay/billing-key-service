@@ -1,0 +1,37 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: billing-key-service
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+  # datasource:
+  #   url: jdbc:mysql://localhost:3308/pg_billing_db?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+  #   username: root
+  #   password: 1234
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3308/pg_billing_db}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:1234}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+card-simulator:
+  base-url: ${CARD_SIMULATOR_BASE_URL:http://localhost:8095}
+
+pg:
+  id: ${PG_ID:001}
+
+aes:
+  secret-key: ${AES_SECRET_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
