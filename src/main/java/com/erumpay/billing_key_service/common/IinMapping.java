@@ -1,8 +1,16 @@
 package com.erumpay.billing_key_service.common;
 
+import java.util.Map;
+
 public class IinMapping {
 
     private IinMapping() {}
+
+    // 80~89 mockBin 규약 밖의 실물 카드 BIN(앞 6자리) -> 카드사 매핑.
+    // 시뮬레이터 시드(seed.csv, CardProductCatalog)와 1:1로 일치해야 한다.
+    private static final Map<String, CardCompany> PROMOTED_BIN_TO_COMPANY = Map.of(
+        "527289", CardCompany.KB
+    );
 
     public static CardCompany findByCardNumber(String cardNumber) {
         if (cardNumber == null) {
@@ -11,6 +19,12 @@ public class IinMapping {
         String normalized = cardNumber.replaceAll("\\D", "");
         if (normalized.length() < 2) {
             return CardCompany.UNKNOWN;
+        }
+        if (normalized.length() >= 6) {
+            CardCompany promoted = PROMOTED_BIN_TO_COMPANY.get(normalized.substring(0, 6));
+            if (promoted != null) {
+                return promoted;
+            }
         }
         return switch (normalized.substring(0, 2)) {
             case "80" -> CardCompany.SAMSUNG;
