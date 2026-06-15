@@ -34,7 +34,7 @@ pg:
   id: ${PG_ID:001}
 
 aes:
-  secret-key: ${AES_SECRET_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
+  secret-key: ${AES_SECRET_KEY:erumpay-dev-billingkey-aes256!!!}
 
 # 헬스체크 노출 + 분산 추적(Zipkin)
 management:
