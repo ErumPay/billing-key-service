@@ -15,7 +15,6 @@ import java.util.Base64;
 public class AesCryptoUtil {
 
     private static final String ALGORITHM = "AES/ECB/PKCS5Padding";
-    private static final int KEY_LENGTH_BYTES = 32;
 
     @Value("${aes.secret-key}")
     private String secretKey;
@@ -24,9 +23,9 @@ public class AesCryptoUtil {
 
     @PostConstruct
     void init() {
-        byte[] keyBytes = Base64.getDecoder().decode(secretKey);
-        if (keyBytes.length != KEY_LENGTH_BYTES) {
-            throw new IllegalStateException("aes.secret-key must decode to exactly 32 bytes");
+        byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length != 16 && keyBytes.length != 24 && keyBytes.length != 32) {
+            throw new IllegalStateException("aes.secret-key must be 16, 24, or 32 bytes (UTF-8)");
         }
         this.keySpec = new SecretKeySpec(keyBytes, "AES");
         this.secretKey = null;
